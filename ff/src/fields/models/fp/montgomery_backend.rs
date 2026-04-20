@@ -149,6 +149,23 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     #[unroll_for_loops(12)]
     #[inline(always)]
     fn mul_assign(a: &mut Fp<MontBackend<Self, N>, N>, b: &Fp<MontBackend<Self, N>, N>) {
+        // ------------------------------------------------------------------
+        // SP1 zkVM optimization — uses sys_bigint precompile for N=4 fields
+        // ------------------------------------------------------------------
+        #[cfg(target_os = "zkvm")]
+        if N == 4 {
+            #[allow(unsafe_code)]
+            unsafe {
+                sp1_lib::sys_bigint(
+                    (&mut (a.0).0) as *mut [u64; N] as *mut [u64; 4],
+                    0, // OP_MULMOD
+                    (&(a.0).0) as *const [u64; N] as *const [u64; 4],
+                    (&(b.0).0) as *const [u64; N] as *const [u64; 4],
+                    (&Self::MODULUS.0) as *const [u64; N] as *const [u64; 4],
+                );
+            }
+            return;
+        }
         // No-carry optimisation applied to CIOS
         if Self::CAN_USE_NO_CARRY_MUL_OPT {
             if N <= 6

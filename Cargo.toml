@@ -70,6 +70,8 @@ sha3 = { version = "0.10", default-features = false }
 blake2 = { version = "0.10", default-features = false }
 zeroize = { version = "1", default-features = false }
 
+sp1-lib  = { version = "6.0.2", default-features = false }
+
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = "2.0"
