@@ -153,6 +153,8 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         // SP1 zkVM optimization — uses sys_bigint precompile for N=4 fields
         // ------------------------------------------------------------------
         #[cfg(target_os = "zkvm")]
+        println!("cycle-tracker-start: mul_assign");
+        #[cfg(target_os = "zkvm")]
         if N == 4 {
             #[allow(unsafe_code)]
             unsafe {
@@ -166,6 +168,8 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
             }
             return;
         }
+        #[cfg(target_os = "zkvm")]
+        println!("cycle-tracker-end: mul_assign");
         // No-carry optimisation applied to CIOS
         if Self::CAN_USE_NO_CARRY_MUL_OPT {
             if N <= 6
