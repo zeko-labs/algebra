@@ -674,22 +674,49 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
         if N == 4 {
             #[allow(unsafe_code)]
             unsafe {
-                let a_ptr = (a.0).0.as_ptr() as *const [u64; 4];
-                let b_ptr = (b.0).0.as_ptr() as *const [u64; 4];
-                let zero = [0u64; 4];
+                let a_limbs = &mut *(a.0 .0.as_mut_ptr() as *mut [u64; 4]);
+                let b_limbs = &*(b.0 .0.as_ptr() as *const [u64; 4]);
+                let m_limbs = &*(Self::MODULUS.0.as_ptr() as *const [u64; 4]);
+
+                // a + b avec carry
+                let mut carry = 0u64;
                 let mut result = [0u64; 4];
-                let mut carry = [0u64; 4];
-                sp1_lib::syscall_uint256_add_with_carry(
-                    &*a_ptr,
-                    &*b_ptr,
-                    &zero,
-                    &mut result,
-                    &mut carry,
-                );
-                // Réduction conditionnelle si carry ou >= modulus
-                // TODO: comparer result >= MODULUS et soustraire
-                let dst = (a.0).0.as_mut_ptr() as *mut [u64; 4];
-                *dst = result;
+                for i in 0..4 {
+                    let (s1, c1) = a_limbs[i].overflowing_add(b_limbs[i]);
+                    let (s2, c2) = s1.overflowing_add(carry);
+                    result[i] = s2;
+                    carry = (c1 as u64) + (c2 as u64);
+                }
+
+                // Réduction conditionnelle si carry ou result >= modulus
+                let need_reduce = carry > 0 || {
+                    let mut ge = false;
+                    let mut eq = true;
+                    for i in (0..4).rev() {
+                        if !eq {
+                            break;
+                        }
+                        if result[i] > m_limbs[i] {
+                            ge = true;
+                            eq = false;
+                        } else if result[i] < m_limbs[i] {
+                            eq = false;
+                        }
+                    }
+                    ge || eq // eq = result == modulus, aussi invalide
+                };
+
+                if need_reduce {
+                    let mut borrow = 0u64;
+                    for i in 0..4 {
+                        let (d1, b1) = result[i].overflowing_sub(m_limbs[i]);
+                        let (d2, b2) = d1.overflowing_sub(borrow);
+                        result[i] = d2;
+                        borrow = (b1 as u64) + (b2 as u64);
+                    }
+                }
+
+                *a_limbs = result;
             }
             return;
         }
