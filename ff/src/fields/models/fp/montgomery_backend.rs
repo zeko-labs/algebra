@@ -23,7 +23,6 @@ static FIELD_SQUARE_COUNT: AtomicUsize = AtomicUsize::new(0);
 #[cfg(feature = "debug-log")]
 static FIELD_SUM_OF_PRODUCTS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-
 pub fn dump_field_counters() {
     #[cfg(feature = "debug-log")]
     std::println!(
@@ -184,6 +183,8 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         // ------------------------------------------------------------------
         // SP1 zkVM optimization — uses sys_bigint precompile for N=4 fields
         // ------------------------------------------------------------------
+        #[cfg(feature = "debug-log")]
+        compile_error!("ARK_FF_MUL_ASSIGN_FILE_IS_COMPILED");
 
         #[cfg(feature = "debug-log")]
         {
@@ -191,7 +192,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         }
 
         #[cfg(target_os = "zkvm")]
-        {          
+        {
             if N == 4 {
                 let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
                     0x992d30ed00000001 => Some([
