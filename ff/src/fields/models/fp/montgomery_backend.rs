@@ -23,8 +23,9 @@ static FIELD_SQUARE_COUNT: AtomicUsize = AtomicUsize::new(0);
 #[cfg(feature = "debug-log")]
 static FIELD_SUM_OF_PRODUCTS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-#[cfg(feature = "debug-log")]
+
 pub fn dump_field_counters() {
+    #[cfg(feature = "debug-log")]
     std::println!(
         "ark-ff counters => double_in_place={}, mul_assign={}, square_in_place={}, sum_of_products={}",
         FIELD_ADD_DOUBLE_COUNT.load(Ordering::Relaxed),

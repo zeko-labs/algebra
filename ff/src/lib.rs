@@ -18,7 +18,7 @@ extern crate educe;
 
 #[cfg(feature = "debug-log")]
 extern crate std;
-#[cfg(feature = "debug-log")]
+
 pub use crate::fields::models::fp::dump_field_counters;
 
 #[macro_use]
