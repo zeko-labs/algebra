@@ -178,7 +178,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     /// [here](https://hackmd.io/@gnark/modular_multiplication) if
     /// `Self::MODULUS` has (a) a non-zero MSB, and (b) at least one
     /// zero bit in the rest of the modulus.
-    #[unroll_for_loops(12)]
+    //#[unroll_for_loops(12)]
     fn mul_assign(a: &mut Fp<MontBackend<Self, N>, N>, b: &Fp<MontBackend<Self, N>, N>) {
         // ------------------------------------------------------------------
         // SP1 zkVM optimization — uses sys_bigint precompile for N=4 fields
@@ -736,20 +736,14 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     /// `P::MODULUS` has (a) a non-zero MSB, and (b) at least one
     /// zero bit in the rest of the modulus.
     fn mul_assign(a: &mut Fp<Self, N>, b: &Fp<Self, N>) {
-        #[cfg(feature = "debug-log")]
-        panic!("FP_CONFIG_MUL_ASSIGN_REACHED");
         T::mul_assign(a, b)
     }
 
     fn sum_of_products<const M: usize>(a: &[Fp<Self, N>; M], b: &[Fp<Self, N>; M]) -> Fp<Self, N> {
-        #[cfg(feature = "debug-log")]
-        panic!("FP_CONFIG_SUM_OF_PRODUCTS_REACHED");
         T::sum_of_products(a, b)
     }
 
     fn square_in_place(a: &mut Fp<Self, N>) {
-        #[cfg(feature = "debug-log")]
-        panic!("FP_CONFIG_SQUARE_IN_PLACE_REACHED");
         T::square_in_place(a)
     }
 
