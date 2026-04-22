@@ -670,6 +670,29 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     const SQRT_PRECOMP: Option<crate::SqrtPrecomputation<Fp<Self, N>>> = T::SQRT_PRECOMP;
 
     fn add_assign(a: &mut Fp<Self, N>, b: &Fp<Self, N>) {
+        #[cfg(target_os = "zkvm")]
+        if N == 4 {
+            #[allow(unsafe_code)]
+            unsafe {
+                let a_ptr = (a.0).0.as_ptr() as *const [u64; 4];
+                let b_ptr = (b.0).0.as_ptr() as *const [u64; 4];
+                let zero = [0u64; 4];
+                let mut result = [0u64; 4];
+                let mut carry = [0u64; 4];
+                sp1_lib::syscall_uint256_add_with_carry(
+                    &*a_ptr,
+                    &*b_ptr,
+                    &zero,
+                    &mut result,
+                    &mut carry,
+                );
+                // Réduction conditionnelle si carry ou >= modulus
+                // TODO: comparer result >= MODULUS et soustraire
+                let dst = (a.0).0.as_mut_ptr() as *mut [u64; 4];
+                *dst = result;
+            }
+            return;
+        }
         T::add_assign(a, b)
     }
 
@@ -678,19 +701,6 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     }
 
     fn double_in_place(a: &mut Fp<Self, N>) {
-        #[cfg(target_os = "zkvm")]
-        if N == 4 {
-            // Montgomery representation is preserved by modular addition:
-            // if a = xR mod p, then 2a = (2x)R mod p.
-            let carry = a.0.mul2();
-
-            if T::MODULUS_HAS_SPARE_BIT {
-                a.subtract_modulus();
-            } else {
-                a.subtract_modulus_with_carry(carry);
-            }
-            return;
-        }
         T::double_in_place(a)
     }
 
