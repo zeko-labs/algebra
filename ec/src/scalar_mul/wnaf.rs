@@ -53,6 +53,13 @@ impl WnafContext {
         base_table: &[G],
         scalar: &G::ScalarField,
     ) -> Option<G> {
+        #[cfg(target_os = "zkvm")]
+        {
+            println!(
+                "Using wNAF for scalar multiplication with window size {}",
+                self.window_size
+            );
+        }
         if 1 << (self.window_size - 1) > base_table.len() {
             return None;
         }

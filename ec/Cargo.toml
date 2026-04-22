@@ -28,6 +28,7 @@ rayon = { workspace = true, optional = true }
 zeroize = { workspace = true, features = ["zeroize_derive"] }
 hashbrown.workspace = true
 itertools.workspace = true
+sp1-lib.workspace = true
 
 [target.'cfg(all(target_has_atomic = "8", target_has_atomic = "16", target_has_atomic = "32", target_has_atomic = "64", target_has_atomic = "ptr"))'.dependencies]
 ahash = { version = "0.8", default-features = false}
