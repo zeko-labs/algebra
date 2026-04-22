@@ -61,15 +61,15 @@ pub trait VariableBaseMSM: ScalarMul {
         bigints: &[<Self::ScalarField as PrimeField>::BigInt],
     ) -> Self {
         if Self::NEGATION_IS_CHEAP {
-            #[cfg(target_os = "zkvm")]
+            #[cfg(test)]
             {
-                println!("Using wNAF for MSM with {} bases", bases.len());
+                std::println!("Using wNAF for MSM with {} bases", bases.len());
             }
             msm_bigint_wnaf(bases, bigints)
         } else {
-            #[cfg(target_os = "zkvm")]
+            #[cfg(test)]
             {
-                println!("Using bucket method for MSM with {} bases", bases.len());
+                std::println!("Using bucket method for MSM with {} bases", bases.len());
             }
             msm_bigint(bases, bigints)
         }

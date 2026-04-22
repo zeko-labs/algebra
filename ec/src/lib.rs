@@ -14,6 +14,9 @@
 )]
 #![doc = include_str!("../README.md")]
 
+#[cfg(test)]
+extern crate std;
+
 #[macro_use]
 extern crate ark_std;
 
