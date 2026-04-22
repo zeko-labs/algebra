@@ -708,7 +708,7 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
                     0x6119a3dd8e1a6f7f,
                     0xc68de1279dc601eb,
                     0x5790be58c050df13,
-                    0x1f7a89dd17647953,
+                    0x1f7a89dd17647954,
                 ]),
                 _ => None,
             };
