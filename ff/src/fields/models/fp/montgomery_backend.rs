@@ -740,6 +740,42 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     #[inline]
     #[allow(unused_braces, clippy::absurd_extreme_comparisons)]
     fn square_in_place(a: &mut Fp<Self, N>) {
+        #[cfg(target_os = "zkvm")]
+        if N == 4 {
+            let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
+                0x992d30ed00000001 => Some([
+                    0xcf3f8e8753a769a9,
+                    0xac9fba6a4077fc57,
+                    0x70cb2996efc89a65,
+                    0x21f1c4ff1e2278d5,
+                ]),
+                0x8c46eb2100000001 => Some([
+                    0x6119a3dd8e1a6f7f,
+                    0xc68de1279dc601eb,
+                    0x5790be58c050df13,
+                    0x1f7a89dd17647953,
+                ]),
+                _ => None,
+            };
+
+            if let Some(r_inv) = r_inv_opt {
+                #[allow(unsafe_code)]
+                unsafe {
+                    let a_ptr = (a.0).0.as_ptr() as *const [u64; 4];
+                    let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
+                    let mut tmp = [0u64; 4];
+                    let mut result = [0u64; 4];
+
+                    sp1_lib::sys_bigint(&mut tmp, 0, &*a_ptr, &*a_ptr, &*m_ptr);
+                    sp1_lib::sys_bigint(&mut result, 0, &tmp, &r_inv, &*m_ptr);
+
+                    let dst = (a.0).0.as_mut_ptr() as *mut [u64; 4];
+                    *dst = result;
+                }
+                return;
+            }
+        }
+
         T::square_in_place(a)
     }
 
