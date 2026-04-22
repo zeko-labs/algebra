@@ -5,35 +5,6 @@ use crate::{
 use ark_ff_macros::unroll_for_loops;
 use ark_std::marker::PhantomData;
 
-#[cfg(feature = "debug-log")]
-extern crate std;
-
-#[cfg(feature = "debug-log")]
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-#[cfg(feature = "debug-log")]
-static FIELD_ADD_DOUBLE_COUNT: AtomicUsize = AtomicUsize::new(0);
-
-#[cfg(feature = "debug-log")]
-static FIELD_MUL_COUNT: AtomicUsize = AtomicUsize::new(0);
-
-#[cfg(feature = "debug-log")]
-static FIELD_SQUARE_COUNT: AtomicUsize = AtomicUsize::new(0);
-
-#[cfg(feature = "debug-log")]
-static FIELD_SUM_OF_PRODUCTS_COUNT: AtomicUsize = AtomicUsize::new(0);
-
-pub fn dump_field_counters() {
-    #[cfg(feature = "debug-log")]
-    std::println!(
-        "ark-ff counters => double_in_place={}, mul_assign={}, square_in_place={}, sum_of_products={}",
-        FIELD_ADD_DOUBLE_COUNT.load(Ordering::Relaxed),
-        FIELD_MUL_COUNT.load(Ordering::Relaxed),
-        FIELD_SQUARE_COUNT.load(Ordering::Relaxed),
-        FIELD_SUM_OF_PRODUCTS_COUNT.load(Ordering::Relaxed),
-    );
-}
-
 /// A trait that specifies the constants and arithmetic procedures
 /// for Montgomery arithmetic over the prime field defined by `MODULUS`.
 ///
@@ -147,11 +118,8 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     }
 
     /// Sets `a = 2 * a`.
+    #[inline(always)]
     fn double_in_place(a: &mut Fp<MontBackend<Self, N>, N>) {
-        #[cfg(feature = "debug-log")]
-        {
-            FIELD_ADD_DOUBLE_COUNT.fetch_add(1, Ordering::Relaxed);
-        }
         // This cannot exceed the backing capacity.
         let c = a.0.mul2();
         // However, it may need to be reduced.
@@ -178,21 +146,16 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     /// [here](https://hackmd.io/@gnark/modular_multiplication) if
     /// `Self::MODULUS` has (a) a non-zero MSB, and (b) at least one
     /// zero bit in the rest of the modulus.
-    //#[unroll_for_loops(12)]
+    #[unroll_for_loops(12)]
+    #[inline(always)]
     fn mul_assign(a: &mut Fp<MontBackend<Self, N>, N>, b: &Fp<MontBackend<Self, N>, N>) {
         // ------------------------------------------------------------------
         // SP1 zkVM optimization — uses sys_bigint precompile for N=4 fields
         // ------------------------------------------------------------------
-        #[cfg(feature = "debug-log")]
-        panic!("ARK_FF_MUL_ASSIGN_REACHED");
-
-        #[cfg(feature = "debug-log")]
-        {
-            FIELD_MUL_COUNT.fetch_add(1, Ordering::Relaxed);
-        }
 
         #[cfg(target_os = "zkvm")]
         {
+            println!("Montgomery mul: SP1 optimization enabled for N = {N}");
             if N == 4 {
                 let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
                     0x992d30ed00000001 => Some([
@@ -297,12 +260,9 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         }
     }
 
+    #[inline(always)]
     #[unroll_for_loops(12)]
     fn square_in_place(a: &mut Fp<MontBackend<Self, N>, N>) {
-        #[cfg(feature = "debug-log")]
-        {
-            FIELD_SQUARE_COUNT.fetch_add(1, Ordering::Relaxed);
-        }
         if N == 1 {
             // We default to multiplying with `a` using the `Mul` impl
             // for the N == 1 case
@@ -495,10 +455,6 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         //   need to store a single extra limb overall, instead of keeping around all the
         //   intermediate results and eventually having twice as many limbs.
 
-        #[cfg(feature = "debug-log")]
-        {
-            FIELD_SUM_OF_PRODUCTS_COUNT.fetch_add(1, Ordering::Relaxed);
-        }
         let modulus_size = Self::MODULUS.const_num_bits() as usize;
         if modulus_size >= 64 * N - 1 {
             a.iter().zip(b).map(|(a, b)| *a * b).sum()
@@ -735,6 +691,7 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     /// [here](https://hackmd.io/@zkteam/modular_multiplication) if
     /// `P::MODULUS` has (a) a non-zero MSB, and (b) at least one
     /// zero bit in the rest of the modulus.
+    #[inline]
     fn mul_assign(a: &mut Fp<Self, N>, b: &Fp<Self, N>) {
         T::mul_assign(a, b)
     }
@@ -743,6 +700,8 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
         T::sum_of_products(a, b)
     }
 
+    #[inline]
+    #[allow(unused_braces, clippy::absurd_extreme_comparisons)]
     fn square_in_place(a: &mut Fp<Self, N>) {
         T::square_in_place(a)
     }
@@ -827,6 +786,15 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     }
 
     const fn mul_without_cond_subtract(mut self, other: &Self) -> (bool, Self) {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!(
+                "mul_without_cond_subtract: self = {:?}, other = {:?}",
+                self,
+                other
+            );
+        }
+
         let (mut lo, mut hi) = ([0u64; N], [0u64; N]);
         crate::const_for!((i in 0..N) {
             let mut carry = 0;
@@ -864,6 +832,10 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
     }
 
     const fn mul(self, other: &Self) -> Self {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul: self = {:?}, other = {:?}", self, other);
+        }
         let (carry, res) = self.mul_without_cond_subtract(other);
         if T::MODULUS_HAS_SPARE_BIT {
             res.const_subtract_modulus()

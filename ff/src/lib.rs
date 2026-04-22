@@ -19,8 +19,6 @@ extern crate educe;
 #[cfg(feature = "debug-log")]
 extern crate std;
 
-pub use crate::fields::models::fp::dump_field_counters;
-
 #[macro_use]
 pub mod biginteger;
 pub use biginteger::{
