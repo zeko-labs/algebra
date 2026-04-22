@@ -44,6 +44,7 @@ sp1-lib.workspace = true
 
 [features]
 default = []
+debug-log = []
 std = [ "ark-std/std", "ark-serialize/std", "itertools/use_std" ]
 parallel = [ "std", "rayon", "ark-std/parallel", "ark-serialize/parallel" ]
 asm = []

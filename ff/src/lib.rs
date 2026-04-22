@@ -16,6 +16,9 @@ extern crate ark_std;
 #[macro_use]
 extern crate educe;
 
+#[cfg(feature = "debug-log")]
+extern crate std;
+
 #[macro_use]
 pub mod biginteger;
 pub use biginteger::{

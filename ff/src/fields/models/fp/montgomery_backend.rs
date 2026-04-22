@@ -120,6 +120,10 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     /// Sets `a = 2 * a`.
     #[inline(always)]
     fn double_in_place(a: &mut Fp<MontBackend<Self, N>, N>) {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("double_in_place called on element {}", a.into_bigint());
+        }
         // This cannot exceed the backing capacity.
         let c = a.0.mul2();
         // However, it may need to be reduced.
@@ -152,6 +156,15 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         // ------------------------------------------------------------------
         // SP1 zkVM optimization — uses sys_bigint precompile for N=4 fields
         // ------------------------------------------------------------------
+
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!(
+                "Multiplying {} by {} in Montgomery form",
+                a.into_bigint(),
+                b.into_bigint()
+            );
+        }
 
         #[cfg(target_os = "zkvm")]
         {
@@ -263,6 +276,10 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     #[inline(always)]
     #[unroll_for_loops(12)]
     fn square_in_place(a: &mut Fp<MontBackend<Self, N>, N>) {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("Squaring element {} in Montgomery form", a.into_bigint());
+        }
         if N == 1 {
             // We default to multiplying with `a` using the `Mul` impl
             // for the N == 1 case
@@ -455,6 +472,10 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         //   need to store a single extra limb overall, instead of keeping around all the
         //   intermediate results and eventually having twice as many limbs.
 
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("sum_of_products called with M = {}, N = {}", M, N);
+        }
         let modulus_size = Self::MODULUS.const_num_bits() as usize;
         if modulus_size >= 64 * N - 1 {
             a.iter().zip(b).map(|(a, b)| *a * b).sum()
