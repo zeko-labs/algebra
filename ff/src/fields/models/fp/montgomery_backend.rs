@@ -736,15 +736,15 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     fn sum_of_products<const M: usize>(a: &[Fp<Self, N>; M], b: &[Fp<Self, N>; M]) -> Fp<Self, N> {
         #[cfg(target_os = "zkvm")]
         if N == 4 {
-            // sum_of_products = sum_i (a[i] * b[i]) in Montgomery
-            // = sum_i sys_bigint(a[i], b[i], p) * R_inv
-            let mut result = Fp::<Self, N>::zero();
-            for (ai, bi) in a.iter().zip(b.iter()) {
-                let mut prod = *ai;
-                <Self as FpConfig<N>>::mul_assign(&mut prod, bi);
-                result += prod;
+            let mut acc = Fp::<Self, N>::ZERO;
+            let mut i = 0;
+            while i < M {
+                let mut t = a[i];
+                <Self as FpConfig<N>>::mul_assign(&mut t, &b[i]);
+                <Self as FpConfig<N>>::add_assign(&mut acc, &t);
+                i += 1;
             }
-            return result;
+            return acc;
         }
         T::sum_of_products(a, b)
     }
