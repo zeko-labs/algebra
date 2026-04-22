@@ -184,7 +184,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         // SP1 zkVM optimization — uses sys_bigint precompile for N=4 fields
         // ------------------------------------------------------------------
         #[cfg(feature = "debug-log")]
-        compile_error!("ARK_FF_MUL_ASSIGN_FILE_IS_COMPILED");
+        panic!("ARK_FF_MUL_ASSIGN_REACHED");
 
         #[cfg(feature = "debug-log")]
         {
