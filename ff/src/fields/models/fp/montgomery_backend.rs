@@ -736,16 +736,45 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     fn sum_of_products<const M: usize>(a: &[Fp<Self, N>; M], b: &[Fp<Self, N>; M]) -> Fp<Self, N> {
         #[cfg(target_os = "zkvm")]
         if N == 4 {
-            let mut acc = Fp::<Self, N>::new_unchecked(BigInt([0u64; N]));
-            let mut i = 0;
-            while i < M {
-                let mut t = a[i];
-                <Self as FpConfig<N>>::mul_assign(&mut t, &b[i]);
-                <Self as FpConfig<N>>::add_assign(&mut acc, &t);
-                i += 1;
+            let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
+                0x992d30ed00000001 => Some([
+                    0xcf3f8e8753a769a9,
+                    0xac9fba6a4077fc57,
+                    0x70cb2996efc89a65,
+                    0x21f1c4ff1e2278d5,
+                ]),
+                0x8c46eb2100000001 => Some([
+                    0x6119a3dd8e1a6f7f,
+                    0xc68de1279dc601eb,
+                    0x5790be58c050df13,
+                    0x1f7a89dd17647953,
+                ]),
+                _ => None,
+            };
+
+            if let Some(r_inv) = r_inv_opt {
+                let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
+                let mut acc = Fp::<Self, N>::zero();
+
+                for (ai, bi) in a.iter().zip(b.iter()) {
+                    #[allow(unsafe_code)]
+                    unsafe {
+                        let a_ptr = (ai.0).0.as_ptr() as *const [u64; 4];
+                        let b_ptr = (bi.0).0.as_ptr() as *const [u64; 4];
+                        let mut tmp = [0u64; 4];
+                        let mut result = [0u64; 4];
+                        sp1_lib::sys_bigint(&mut tmp, 0, &*a_ptr, &*b_ptr, &*m_ptr);
+                        sp1_lib::sys_bigint(&mut result, 0, &tmp, &r_inv, &*m_ptr);
+                        // result est maintenant a[i]*b[i] en Montgomery
+                        // Additionne dans acc
+                        let prod = Fp::<Self, N>::new_unchecked(BigInt(result));
+                        acc += prod;
+                    }
+                }
+                return acc;
             }
-            return acc;
         }
+
         T::sum_of_products(a, b)
     }
 
