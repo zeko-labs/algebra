@@ -14,7 +14,7 @@
 )]
 #![doc = include_str!("../README.md")]
 
-#[cfg(test)]
+#[cfg(feature = "debug-log")]
 extern crate std;
 
 #[macro_use]

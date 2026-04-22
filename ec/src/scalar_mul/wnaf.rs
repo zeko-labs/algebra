@@ -53,7 +53,7 @@ impl WnafContext {
         base_table: &[G],
         scalar: &G::ScalarField,
     ) -> Option<G> {
-        #[cfg(test)]
+        #[cfg(feature = "debug-log")]
         {
             std::println!(
                 "Using wNAF for scalar multiplication with window size {}",
