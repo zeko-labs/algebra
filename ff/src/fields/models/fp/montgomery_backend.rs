@@ -157,25 +157,40 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         {
             println!("Montgomery mul: SP1 optimization enabled for N = {N}");
             if N == 4 {
-                // R_inv = R^{-1} mod p — precomputed constant per field
-                // For Pallas Fp: computed from R = Self::R
-                let a_limbs: [u64; 4] = (a.0).0.try_into().unwrap();
-                let b_limbs: [u64; 4] = (b.0).0.try_into().unwrap();
-                let m_limbs: [u64; 4] = Self::MODULUS.0.try_into().unwrap();
-                let r_inv: [u64; 4] = Self::R_INV.0.try_into().unwrap();
+                let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
+                    0x992d30ed00000001 => Some([
+                        0xcf3f8e8753a769a9,
+                        0xac9fba6a4077fc57,
+                        0x70cb2996efc89a65,
+                        0x21f1c4ff1e2278d5,
+                    ]),
+                    0x8c46eb2100000001 => Some([
+                        0x6119a3dd8e1a6f7f,
+                        0xc68de1279dc601eb,
+                        0x5790be58c050df13,
+                        0x1f7a89dd17647953,
+                    ]),
+                    _ => None,
+                };
 
-                let mut tmp = [0u64; 4];
-                let mut result = [0u64; 4];
+                if let Some(r_inv) = r_inv_opt {
+                    #[allow(unsafe_code)]
+                    unsafe {
+                        let a_ptr = (a.0).0.as_ptr() as *const [u64; 4];
+                        let b_ptr = (b.0).0.as_ptr() as *const [u64; 4];
+                        let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
 
-                #[allow(unsafe_code)]
-                unsafe {
-                    // step1: a_mont * b_mont mod p = a*b*R² mod p
-                    sp1_lib::sys_bigint(&mut tmp, 0, &a_limbs, &b_limbs, &m_limbs);
-                    // step2: * R_inv mod p = a*b*R mod p  ✓
-                    sp1_lib::sys_bigint(&mut result, 0, &tmp, &r_inv, &m_limbs);
+                        let mut tmp = [0u64; 4];
+                        let mut result = [0u64; 4];
+
+                        sp1_lib::sys_bigint(&mut tmp, 0, &*a_ptr, &*b_ptr, &*m_ptr);
+                        sp1_lib::sys_bigint(&mut result, 0, &tmp, &r_inv, &*m_ptr);
+
+                        let dst = (a.0).0.as_mut_ptr() as *mut [u64; 4];
+                        *dst = result;
+                    }
+                    return;
                 }
-                (a.0).0.copy_from_slice(&result);
-                return;
             }
         }
 
