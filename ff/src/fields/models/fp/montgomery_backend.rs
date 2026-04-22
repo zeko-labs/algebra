@@ -735,18 +735,21 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     /// [here](https://hackmd.io/@zkteam/modular_multiplication) if
     /// `P::MODULUS` has (a) a non-zero MSB, and (b) at least one
     /// zero bit in the rest of the modulus.
-    #[inline]
     fn mul_assign(a: &mut Fp<Self, N>, b: &Fp<Self, N>) {
+        #[cfg(feature = "debug-log")]
+        panic!("FP_CONFIG_MUL_ASSIGN_REACHED");
         T::mul_assign(a, b)
     }
 
     fn sum_of_products<const M: usize>(a: &[Fp<Self, N>; M], b: &[Fp<Self, N>; M]) -> Fp<Self, N> {
+        #[cfg(feature = "debug-log")]
+        panic!("FP_CONFIG_SUM_OF_PRODUCTS_REACHED");
         T::sum_of_products(a, b)
     }
 
-    #[inline]
-    #[allow(unused_braces, clippy::absurd_extreme_comparisons)]
     fn square_in_place(a: &mut Fp<Self, N>) {
+        #[cfg(feature = "debug-log")]
+        panic!("FP_CONFIG_SQUARE_IN_PLACE_REACHED");
         T::square_in_place(a)
     }
 
