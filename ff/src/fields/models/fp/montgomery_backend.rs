@@ -678,6 +678,19 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     }
 
     fn double_in_place(a: &mut Fp<Self, N>) {
+        #[cfg(target_os = "zkvm")]
+        if N == 4 {
+            // Montgomery representation is preserved by modular addition:
+            // if a = xR mod p, then 2a = (2x)R mod p.
+            let carry = a.0.mul2();
+
+            if T::MODULUS_HAS_SPARE_BIT {
+                a.subtract_modulus();
+            } else {
+                a.subtract_modulus_with_carry(carry);
+            }
+            return;
+        }
         T::double_in_place(a)
     }
 
