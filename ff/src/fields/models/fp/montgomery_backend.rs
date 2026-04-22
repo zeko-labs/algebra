@@ -678,49 +678,6 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     }
 
     fn double_in_place(a: &mut Fp<Self, N>) {
-        #[cfg(target_os = "zkvm")]
-        if N == 4 {
-            #[allow(unsafe_code)]
-            unsafe {
-                let a_limbs = &mut *(a.0 .0.as_mut_ptr() as *mut [u64; 4]);
-                let m_limbs = &*(Self::MODULUS.0.as_ptr() as *const [u64; 4]);
-
-                // 2*a = a << 1 (left shift by 1 bit)
-                let carry = a_limbs[3] >> 63;
-                a_limbs[3] = (a_limbs[3] << 1) | (a_limbs[2] >> 63);
-                a_limbs[2] = (a_limbs[2] << 1) | (a_limbs[1] >> 63);
-                a_limbs[1] = (a_limbs[1] << 1) | (a_limbs[0] >> 63);
-                a_limbs[0] = a_limbs[0] << 1;
-
-                let need_reduce = carry > 0 || {
-                    let mut ge = false;
-                    let mut eq = true;
-                    for i in (0..4).rev() {
-                        if !eq {
-                            break;
-                        }
-                        if a_limbs[i] > m_limbs[i] {
-                            ge = true;
-                            eq = false;
-                        } else if a_limbs[i] < m_limbs[i] {
-                            eq = false;
-                        }
-                    }
-                    ge || eq
-                };
-
-                if need_reduce {
-                    let mut borrow = 0u64;
-                    for i in 0..4 {
-                        let (d1, b1) = a_limbs[i].overflowing_sub(m_limbs[i]);
-                        let (d2, b2) = d1.overflowing_sub(borrow);
-                        a_limbs[i] = d2;
-                        borrow = (b1 as u64) + (b2 as u64);
-                    }
-                }
-            }
-            return;
-        }
         T::double_in_place(a)
     }
 
@@ -869,6 +826,67 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     }
 
     fn from_bigint(r: BigInt<N>) -> Option<Fp<Self, N>> {
+        #[cfg(target_os = "zkvm")]
+        if N == 4 {
+            let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
+                0x992d30ed00000001 => Some([
+                    0xcf3f8e8753a769a9,
+                    0xac9fba6a4077fc57,
+                    0x70cb2996efc89a65,
+                    0x21f1c4ff1e2278d5,
+                ]),
+                0x8c46eb2100000001 => Some([
+                    0x6119a3dd8e1a6f7f,
+                    0xc68de1279dc601eb,
+                    0x5790be58c050df13,
+                    0x1f7a89dd17647953,
+                ]),
+                _ => None,
+            };
+
+            if let Some(r_inv) = r_inv_opt {
+                let is_zero = r.0.iter().all(|&x| x == 0);
+                if is_zero {
+                    return Some(Fp::<Self, N>::zero());
+                }
+
+                let m_limbs = &Self::MODULUS.0;
+                let mut ge = false;
+                let mut eq = true;
+                for i in (0..4).rev() {
+                    if !eq {
+                        break;
+                    }
+                    if r.0[i] > m_limbs[i] {
+                        ge = true;
+                        eq = false;
+                    } else if r.0[i] < m_limbs[i] {
+                        eq = false;
+                    }
+                }
+                if ge || eq {
+                    return None;
+                }
+
+                #[allow(unsafe_code)]
+                unsafe {
+                    let r_ptr = r.0.as_ptr() as *const [u64; 4];
+                    let r2_ptr = Self::R2.0.as_ptr() as *const [u64; 4];
+                    let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
+
+                    // step1 = r * R2 mod p = r * R^2 mod p
+                    let mut tmp = [0u64; 4];
+                    let mut result = [0u64; 4];
+                    sp1_lib::sys_bigint(&mut tmp, 0, &*r_ptr, &*r2_ptr, &*m_ptr);
+                    // step2 = step1 * R_inv mod p = r * R mod p  ✓
+                    sp1_lib::sys_bigint(&mut result, 0, &tmp, &r_inv, &*m_ptr);
+
+                    let mut result_n = [0u64; N];
+                    result_n.copy_from_slice(&result);
+                    return Some(Fp::<Self, N>::new_unchecked(BigInt(result_n)));
+                }
+            }
+        }
         T::from_bigint(r)
     }
 
