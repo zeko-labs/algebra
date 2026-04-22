@@ -871,7 +871,7 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
                 #[allow(unsafe_code)]
                 unsafe {
                     let r_ptr = r.0.as_ptr() as *const [u64; 4];
-                    let r2_ptr = Self::R2.0.as_ptr() as *const [u64; 4];
+                    let r2_ptr = T::R2.0.as_ptr() as *const [u64; 4];
                     let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
 
                     // step1 = r * R2 mod p = r * R^2 mod p
