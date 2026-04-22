@@ -736,7 +736,7 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     fn sum_of_products<const M: usize>(a: &[Fp<Self, N>; M], b: &[Fp<Self, N>; M]) -> Fp<Self, N> {
         #[cfg(target_os = "zkvm")]
         if N == 4 {
-            let mut acc = Fp::<Self, N>::ZERO;
+            let mut acc = Fp::<Self, N>::new_unchecked(BigInt([0u64; N]));
             let mut i = 0;
             while i < M {
                 let mut t = a[i];
