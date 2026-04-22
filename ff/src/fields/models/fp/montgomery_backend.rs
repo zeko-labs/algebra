@@ -5,6 +5,35 @@ use crate::{
 use ark_ff_macros::unroll_for_loops;
 use ark_std::marker::PhantomData;
 
+#[cfg(feature = "debug-log")]
+extern crate std;
+
+#[cfg(feature = "debug-log")]
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[cfg(feature = "debug-log")]
+static FIELD_ADD_DOUBLE_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(feature = "debug-log")]
+static FIELD_MUL_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(feature = "debug-log")]
+static FIELD_SQUARE_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(feature = "debug-log")]
+static FIELD_SUM_OF_PRODUCTS_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(feature = "debug-log")]
+pub fn dump_field_counters() {
+    std::println!(
+        "ark-ff counters => double_in_place={}, mul_assign={}, square_in_place={}, sum_of_products={}",
+        FIELD_ADD_DOUBLE_COUNT.load(Ordering::Relaxed),
+        FIELD_MUL_COUNT.load(Ordering::Relaxed),
+        FIELD_SQUARE_COUNT.load(Ordering::Relaxed),
+        FIELD_SUM_OF_PRODUCTS_COUNT.load(Ordering::Relaxed),
+    );
+}
+
 /// A trait that specifies the constants and arithmetic procedures
 /// for Montgomery arithmetic over the prime field defined by `MODULUS`.
 ///
@@ -121,7 +150,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     fn double_in_place(a: &mut Fp<MontBackend<Self, N>, N>) {
         #[cfg(feature = "debug-log")]
         {
-            std::println!("double_in_place called on element {}", a.into_bigint());
+            FIELD_ADD_DOUBLE_COUNT.fetch_add(1, Ordering::Relaxed);
         }
         // This cannot exceed the backing capacity.
         let c = a.0.mul2();
@@ -157,16 +186,11 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
 
         #[cfg(feature = "debug-log")]
         {
-            std::println!(
-                "Multiplying {} by {} in Montgomery form",
-                a.into_bigint(),
-                b.into_bigint()
-            );
+            FIELD_MUL_COUNT.fetch_add(1, Ordering::Relaxed);
         }
 
         #[cfg(target_os = "zkvm")]
-        {
-            println!("Montgomery mul: SP1 optimization enabled for N = {N}");
+        {          
             if N == 4 {
                 let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
                     0x992d30ed00000001 => Some([
@@ -275,7 +299,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     fn square_in_place(a: &mut Fp<MontBackend<Self, N>, N>) {
         #[cfg(feature = "debug-log")]
         {
-            std::println!("Squaring element {} in Montgomery form", a.into_bigint());
+            FIELD_SQUARE_COUNT.fetch_add(1, Ordering::Relaxed);
         }
         if N == 1 {
             // We default to multiplying with `a` using the `Mul` impl
@@ -471,7 +495,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
 
         #[cfg(feature = "debug-log")]
         {
-            std::println!("sum_of_products called with M = {}, N = {}", M, N);
+            FIELD_SUM_OF_PRODUCTS_COUNT.fetch_add(1, Ordering::Relaxed);
         }
         let modulus_size = Self::MODULUS.const_num_bits() as usize;
         if modulus_size >= 64 * N - 1 {

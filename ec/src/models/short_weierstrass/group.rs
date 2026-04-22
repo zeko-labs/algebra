@@ -173,16 +173,6 @@ impl<P: SWCurveConfig> AdditiveGroup for Projective<P> {
             return self;
         }
 
-        #[cfg(feature = "debug-log")]
-        {
-            std::println!(
-                "double_in_place called on point ({}, {}, {})",
-                self.x,
-                self.y,
-                self.z
-            );
-        }
-
         if P::COEFF_A == P::BaseField::ZERO {
             // A = X1^2
             let mut a = self.x;
