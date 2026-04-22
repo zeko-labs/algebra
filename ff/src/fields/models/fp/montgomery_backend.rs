@@ -701,7 +701,7 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
                     0xcf3f8e8753a769a9,
                     0xac9fba6a4077fc57,
                     0x70cb2996efc89a65,
-                    0x21f1c4ff1e2278d5,
+                    0x21f1c4ff1e2278d4,
                 ]),
                 // Vesta Fq
                 0x8c46eb2100000001 => Some([
