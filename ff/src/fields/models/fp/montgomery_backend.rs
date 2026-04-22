@@ -678,6 +678,49 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     }
 
     fn double_in_place(a: &mut Fp<Self, N>) {
+        #[cfg(target_os = "zkvm")]
+        if N == 4 {
+            #[allow(unsafe_code)]
+            unsafe {
+                let a_limbs = &mut *(a.0 .0.as_mut_ptr() as *mut [u64; 4]);
+                let m_limbs = &*(Self::MODULUS.0.as_ptr() as *const [u64; 4]);
+
+                // 2*a = a << 1 (left shift by 1 bit)
+                let carry = a_limbs[3] >> 63;
+                a_limbs[3] = (a_limbs[3] << 1) | (a_limbs[2] >> 63);
+                a_limbs[2] = (a_limbs[2] << 1) | (a_limbs[1] >> 63);
+                a_limbs[1] = (a_limbs[1] << 1) | (a_limbs[0] >> 63);
+                a_limbs[0] = a_limbs[0] << 1;
+
+                let need_reduce = carry > 0 || {
+                    let mut ge = false;
+                    let mut eq = true;
+                    for i in (0..4).rev() {
+                        if !eq {
+                            break;
+                        }
+                        if a_limbs[i] > m_limbs[i] {
+                            ge = true;
+                            eq = false;
+                        } else if a_limbs[i] < m_limbs[i] {
+                            eq = false;
+                        }
+                    }
+                    ge || eq
+                };
+
+                if need_reduce {
+                    let mut borrow = 0u64;
+                    for i in 0..4 {
+                        let (d1, b1) = a_limbs[i].overflowing_sub(m_limbs[i]);
+                        let (d2, b2) = d1.overflowing_sub(borrow);
+                        a_limbs[i] = d2;
+                        borrow = (b1 as u64) + (b2 as u64);
+                    }
+                }
+            }
+            return;
+        }
         T::double_in_place(a)
     }
 
