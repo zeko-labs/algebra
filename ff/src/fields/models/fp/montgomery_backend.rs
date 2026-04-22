@@ -152,20 +152,33 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         // ------------------------------------------------------------------
         // SP1 zkVM optimization — uses sys_bigint precompile for N=4 fields
         // ------------------------------------------------------------------
-    
-        if N == 4 {
-            #[allow(unsafe_code)]
-            unsafe {
-                sp1_lib::sys_bigint(
-                    (&mut (a.0).0) as *mut [u64; N] as *mut [u64; 4],
-                    0, // OP_MULMOD
-                    (&(a.0).0) as *const [u64; N] as *const [u64; 4],
-                    (&(b.0).0) as *const [u64; N] as *const [u64; 4],
-                    (&Self::MODULUS.0) as *const [u64; N] as *const [u64; 4],
-                );
+
+        #[cfg(target_os = "zkvm")]
+        {
+            println!("Montgomery mul: SP1 optimization enabled for N = {N}");
+            if N == 4 {
+                // R_inv = R^{-1} mod p — precomputed constant per field
+                // For Pallas Fp: computed from R = Self::R
+                let a_limbs: [u64; 4] = (a.0).0.try_into().unwrap();
+                let b_limbs: [u64; 4] = (b.0).0.try_into().unwrap();
+                let m_limbs: [u64; 4] = Self::MODULUS.0.try_into().unwrap();
+                let r_inv: [u64; 4] = Self::R_INV.0.try_into().unwrap();
+
+                let mut tmp = [0u64; 4];
+                let mut result = [0u64; 4];
+
+                #[allow(unsafe_code)]
+                unsafe {
+                    // step1: a_mont * b_mont mod p = a*b*R² mod p
+                    sp1_lib::sys_bigint(&mut tmp, 0, &a_limbs, &b_limbs, &m_limbs);
+                    // step2: * R_inv mod p = a*b*R mod p  ✓
+                    sp1_lib::sys_bigint(&mut result, 0, &tmp, &r_inv, &m_limbs);
+                }
+                (a.0).0.copy_from_slice(&result);
+                return;
             }
-            return;
         }
+
         // No-carry optimisation applied to CIOS
         if Self::CAN_USE_NO_CARRY_MUL_OPT {
             if N <= 6
