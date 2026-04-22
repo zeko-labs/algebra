@@ -678,6 +678,17 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     }
 
     fn double_in_place(a: &mut Fp<Self, N>) {
+        #[cfg(target_os = "zkvm")]
+        if N == 4 {
+            let c = a.0.mul2();
+
+            if Self::MODULUS_HAS_SPARE_BIT {
+                a.subtract_modulus();
+            } else {
+                a.subtract_modulus_with_carry(c);
+            }
+            return;
+        }
         T::double_in_place(a)
     }
 
