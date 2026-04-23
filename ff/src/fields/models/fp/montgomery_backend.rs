@@ -846,15 +846,8 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
                 return Some(Fp::new_unchecked(BigInt(result_n)));
             }
         }
-        let mut r = Fp::new_unchecked(r);
-        if r.is_zero() {
-            Some(r)
-        } else if r.is_geq_modulus() {
-            None
-        } else {
-            r *= &Fp::new_unchecked(T::R2);
-            Some(r)
-        }
+
+        T::from_bigint(r)
     }
 
     #[inline]
