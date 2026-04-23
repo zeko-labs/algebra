@@ -77,6 +77,13 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     const SQRT_PRECOMP: Option<SqrtPrecomputation<Fp<MontBackend<Self, N>, N>>> =
         sqrt_precomputation::<N, Self>();
 
+    /// R^{-1} mod MODULUS — for SP1 zkVM sys_bigint Montgomery correction
+    /// Override this in field configs for Pallas/Vesta to enable sys_bigint
+    const ZKVM_R_INV: Option<[u64; 4]> = None;
+
+    /// R mod MODULUS in standard form — for sys_bigint from_bigint optimization
+    const ZKVM_R: Option<[u64; 4]> = None;
+
     /// (MODULUS + 1) / 4 when MODULUS % 4 == 3. Used for square root precomputations.
     #[doc(hidden)]
     const MODULUS_PLUS_ONE_DIV_FOUR: Option<BigInt<N>> = {
