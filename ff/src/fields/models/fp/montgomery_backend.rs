@@ -5,6 +5,29 @@ use crate::{
 use ark_ff_macros::unroll_for_loops;
 use ark_std::marker::PhantomData;
 
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn pasta_r_inv<const N: usize>(modulus: &BigInt<N>) -> Option<[u64; 4]> {
+    if N != 4 {
+        return None;
+    }
+    match modulus.0[0] {
+        0x992d30ed00000001 => Some([
+            0xcf3f8e8753a769a9,
+            0xac9fba6a4077fc57,
+            0x70cb2996efc89a65,
+            0x21f1c4ff1e2278d5,
+        ]),
+        0x8c46eb2100000001 => Some([
+            0x6119a3dd8e1a6f7f,
+            0xc68de1279dc601eb,
+            0x5790be58c050df13,
+            0x1f7a89dd17647953,
+        ]),
+        _ => None,
+    }
+}
+
 /// A trait that specifies the constants and arithmetic procedures
 /// for Montgomery arithmetic over the prime field defined by `MODULUS`.
 ///
@@ -789,67 +812,49 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
 
     fn from_bigint(r: BigInt<N>) -> Option<Fp<Self, N>> {
         #[cfg(target_os = "zkvm")]
-        if N == 4 {
-            let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
-                0x992d30ed00000001 => Some([
-                    0xcf3f8e8753a769a9,
-                    0xac9fba6a4077fc57,
-                    0x70cb2996efc89a65,
-                    0x21f1c4ff1e2278d5,
-                ]),
-                0x8c46eb2100000001 => Some([
-                    0x6119a3dd8e1a6f7f,
-                    0xc68de1279dc601eb,
-                    0x5790be58c050df13,
-                    0x1f7a89dd17647953,
-                ]),
-                _ => None,
-            };
-
-            if let Some(r_inv) = r_inv_opt {
-                let is_zero = r.0.iter().all(|&x| x == 0);
-                if is_zero {
-                    return Some(Fp::<Self, N>::zero());
+        if let Some(r_inv) = pasta_r_inv(&Self::MODULUS) {
+            let _ = r_inv; // unused here, we use R directly
+            if r.0.iter().all(|&x| x == 0) {
+                return Some(Fp::new_unchecked(BigInt([0u64; N])));
+            }
+            let m = &Self::MODULUS.0;
+            let mut above = false;
+            let mut done = false;
+            for i in (0..4).rev() {
+                if done {
+                    break;
                 }
-
-                let m_limbs = &Self::MODULUS.0;
-                let mut ge = false;
-                let mut eq = true;
-                for i in (0..4).rev() {
-                    if !eq {
-                        break;
-                    }
-                    if r.0[i] > m_limbs[i] {
-                        ge = true;
-                        eq = false;
-                    } else if r.0[i] < m_limbs[i] {
-                        eq = false;
-                    }
-                }
-                if ge || eq {
-                    return None;
-                }
-
-                #[allow(unsafe_code)]
-                unsafe {
-                    let r_ptr = r.0.as_ptr() as *const [u64; 4];
-                    let r2_ptr = T::R2.0.as_ptr() as *const [u64; 4];
-                    let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
-
-                    // step1 = r * R2 mod p = r * R^2 mod p
-                    let mut tmp = [0u64; 4];
-                    let mut result = [0u64; 4];
-                    sp1_lib::sys_bigint(&mut tmp, 0, &*r_ptr, &*r2_ptr, &*m_ptr);
-                    // step2 = step1 * R_inv mod p = r * R mod p  ✓
-                    sp1_lib::sys_bigint(&mut result, 0, &tmp, &r_inv, &*m_ptr);
-
-                    let mut result_n = [0u64; N];
-                    result_n.copy_from_slice(&result);
-                    return Some(Fp::<Self, N>::new_unchecked(BigInt(result_n)));
+                if r.0[i] > m[i] {
+                    above = true;
+                    done = true;
+                } else if r.0[i] < m[i] {
+                    done = true;
                 }
             }
+            if above || !done {
+                return None;
+            }
+            #[allow(unsafe_code)]
+            unsafe {
+                let r_ptr = r.0.as_ptr() as *const [u64; 4];
+                let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
+                let r_mont: [u64; 4] = *(T::R.0.as_ptr() as *const [u64; 4]);
+                let mut result = [0u64; 4];
+                sp1_lib::sys_bigint(&mut result, 0, &*r_ptr, &r_mont, &*m_ptr);
+                let mut result_n = [0u64; N];
+                result_n.copy_from_slice(&result);
+                return Some(Fp::new_unchecked(BigInt(result_n)));
+            }
         }
-        T::from_bigint(r)
+        let mut r = Fp::new_unchecked(r);
+        if r.is_zero() {
+            Some(r)
+        } else if r.is_geq_modulus() {
+            None
+        } else {
+            r *= &Fp::new_unchecked(T::R2);
+            Some(r)
+        }
     }
 
     #[inline]
