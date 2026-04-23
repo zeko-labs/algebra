@@ -149,51 +149,6 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     #[unroll_for_loops(12)]
     #[inline(always)]
     fn mul_assign(a: &mut Fp<MontBackend<Self, N>, N>, b: &Fp<MontBackend<Self, N>, N>) {
-        // ------------------------------------------------------------------
-        // SP1 zkVM optimization — uses sys_bigint precompile for N=4 fields
-        // ------------------------------------------------------------------
-
-        #[cfg(target_os = "zkvm")]
-        {
-            println!("Montgomery mul: SP1 optimization enabled for N = {N}");
-            if N == 4 {
-                let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
-                    0x992d30ed00000001 => Some([
-                        0xcf3f8e8753a769a9,
-                        0xac9fba6a4077fc57,
-                        0x70cb2996efc89a65,
-                        0x21f1c4ff1e2278d5,
-                    ]),
-                    0x8c46eb2100000001 => Some([
-                        0x6119a3dd8e1a6f7f,
-                        0xc68de1279dc601eb,
-                        0x5790be58c050df13,
-                        0x1f7a89dd17647953,
-                    ]),
-                    _ => None,
-                };
-
-                if let Some(r_inv) = r_inv_opt {
-                    #[allow(unsafe_code)]
-                    unsafe {
-                        let a_ptr = (a.0).0.as_ptr() as *const [u64; 4];
-                        let b_ptr = (b.0).0.as_ptr() as *const [u64; 4];
-                        let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
-
-                        let mut tmp = [0u64; 4];
-                        let mut result = [0u64; 4];
-
-                        sp1_lib::sys_bigint(&mut tmp, 0, &*a_ptr, &*b_ptr, &*m_ptr);
-                        sp1_lib::sys_bigint(&mut result, 0, &tmp, &r_inv, &*m_ptr);
-
-                        let dst = (a.0).0.as_mut_ptr() as *mut [u64; 4];
-                        *dst = result;
-                    }
-                    return;
-                }
-            }
-        }
-
         // No-carry optimisation applied to CIOS
         if Self::CAN_USE_NO_CARRY_MUL_OPT {
             if N <= 6
