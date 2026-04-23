@@ -28,6 +28,81 @@ fn pasta_r_inv<const N: usize>(modulus: &BigInt<N>) -> Option<[u64; 4]> {
     }
 }
 
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn bigint_as_u64x4<const N: usize>(x: &BigInt<N>) -> [u64; 4] {
+    [x.0[0], x.0[1], x.0[2], x.0[3]]
+}
+
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn bigint_from_u64x4<const N: usize>(x: [u64; 4]) -> BigInt<N> {
+    let mut out = [0u64; N];
+    out[0] = x[0];
+    out[1] = x[1];
+    out[2] = x[2];
+    out[3] = x[3];
+    BigInt(out)
+}
+
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn geq_u64x4(lhs: &[u64; 4], rhs: &[u64; 4]) -> bool {
+    for i in (0..4).rev() {
+        if lhs[i] > rhs[i] {
+            return true;
+        } else if lhs[i] < rhs[i] {
+            return false;
+        }
+    }
+    true
+}
+
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn add_assign_mod_u64x4(acc: &mut [u64; 4], rhs: &[u64; 4], modulus: &[u64; 4]) {
+    let mut carry = 0u64;
+    for i in 0..4 {
+        let (s1, c1) = acc[i].overflowing_add(rhs[i]);
+        let (s2, c2) = s1.overflowing_add(carry);
+        acc[i] = s2;
+        carry = (c1 as u64) + (c2 as u64);
+    }
+
+    if carry != 0 || geq_u64x4(acc, modulus) {
+        let mut borrow = 0u64;
+        for i in 0..4 {
+            let (d1, b1) = acc[i].overflowing_sub(modulus[i]);
+            let (d2, b2) = d1.overflowing_sub(borrow);
+            acc[i] = d2;
+            borrow = (b1 as u64) + (b2 as u64);
+        }
+    }
+}
+
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn sys_bigint_mul_mod_4(lhs: &[u64; 4], rhs: &[u64; 4], modulus: &[u64; 4]) -> [u64; 4] {
+    let mut out = [0u64; 4];
+    #[allow(unsafe_code)]
+    unsafe {
+        sp1_lib::sys_bigint(&mut out, 0, lhs, rhs, modulus);
+    }
+    out
+}
+
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn sys_bigint_mul_mont_4(
+    lhs: &[u64; 4],
+    rhs: &[u64; 4],
+    r_inv: &[u64; 4],
+    modulus: &[u64; 4],
+) -> [u64; 4] {
+    let tmp = sys_bigint_mul_mod_4(lhs, rhs, modulus);
+    sys_bigint_mul_mod_4(&tmp, r_inv, modulus)
+}
+
 /// A trait that specifies the constants and arithmetic procedures
 /// for Montgomery arithmetic over the prime field defined by `MODULUS`.
 ///
@@ -70,7 +145,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     /// (a) `Self::MODULUS[N-1] < u64::MAX >> 2`, and
     /// (b) the bits of the modulus are not all 1.
     #[doc(hidden)]
-    const CAN_USE_NO_CARRY_SQUARE_OPT: bool = can_use_no_carry_mul_optimization::<Self, N>();
+    const CAN_USE_NO_CARRY_SQUARE_OPT: bool = can_use_no_carry_square_optimization::<Self, N>();
 
     /// Does the modulus have a spare unused bit
     ///
@@ -99,13 +174,6 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     /// The default is to use the standard Tonelli-Shanks algorithm.
     const SQRT_PRECOMP: Option<SqrtPrecomputation<Fp<MontBackend<Self, N>, N>>> =
         sqrt_precomputation::<N, Self>();
-
-    /// R^{-1} mod MODULUS — for SP1 zkVM sys_bigint Montgomery correction
-    /// Override this in field configs for Pallas/Vesta to enable sys_bigint
-    const ZKVM_R_INV: Option<[u64; 4]> = None;
-
-    /// R mod MODULUS in standard form — for sys_bigint from_bigint optimization
-    const ZKVM_R: Option<[u64; 4]> = None;
 
     /// (MODULUS + 1) / 4 when MODULUS % 4 == 3. Used for square root precomputations.
     #[doc(hidden)]
@@ -679,40 +747,25 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     #[inline]
     fn mul_assign(a: &mut Fp<Self, N>, b: &Fp<Self, N>) {
         #[cfg(target_os = "zkvm")]
-        if N == 4 {
-            let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
-                // Pallas Fp
-                0x992d30ed00000001 => Some([
-                    0xcf3f8e8753a769a9,
-                    0xac9fba6a4077fc57,
-                    0x70cb2996efc89a65,
-                    0x21f1c4ff1e2278d5,
-                ]),
-                // Vesta Fq
-                0x8c46eb2100000001 => Some([
-                    0x6119a3dd8e1a6f7f,
-                    0xc68de1279dc601eb,
-                    0x5790be58c050df13,
-                    0x1f7a89dd17647953,
-                ]),
-                _ => None,
-            };
-
-            if let Some(r_inv) = r_inv_opt {
-                #[allow(unsafe_code)]
-                unsafe {
-                    let a_ptr = (a.0).0.as_ptr() as *const [u64; 4];
-                    let b_ptr = (b.0).0.as_ptr() as *const [u64; 4];
-                    let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
-                    let mut tmp = [0u64; 4];
-                    let mut result = [0u64; 4];
-                    sp1_lib::sys_bigint(&mut tmp, 0, &*a_ptr, &*b_ptr, &*m_ptr);
-                    sp1_lib::sys_bigint(&mut result, 0, &tmp, &r_inv, &*m_ptr);
-                    let dst = (a.0).0.as_mut_ptr() as *mut [u64; 4];
-                    *dst = result;
-                }
+        if let Some(r_inv) = pasta_r_inv(&Self::MODULUS) {
+            if a.is_zero() || b.is_zero() {
+                *a = Fp::<Self, N>::zero();
                 return;
             }
+            if a.0 == T::R {
+                *a = *b;
+                return;
+            }
+            if b.0 == T::R {
+                return;
+            }
+
+            let lhs = bigint_as_u64x4(&a.0);
+            let rhs = bigint_as_u64x4(&b.0);
+            let modulus = bigint_as_u64x4(&Self::MODULUS);
+            let result = sys_bigint_mul_mont_4(&lhs, &rhs, &r_inv, &modulus);
+            a.0 = bigint_from_u64x4(result);
+            return;
         }
 
         T::mul_assign(a, b)
@@ -721,62 +774,22 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     fn sum_of_products<const M: usize>(a: &[Fp<Self, N>; M], b: &[Fp<Self, N>; M]) -> Fp<Self, N> {
         #[cfg(target_os = "zkvm")]
         if let Some(r_inv) = pasta_r_inv(&Self::MODULUS) {
-            #[allow(unsafe_code)]
-            unsafe {
-                let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
-                let m = &*(m_ptr);
-                let mut acc = [0u64; 4];
+            let modulus = bigint_as_u64x4(&Self::MODULUS);
+            let mut acc = [0u64; 4];
 
-                for (ai, bi) in a.iter().zip(b.iter()) {
-                    let a_ptr = (ai.0).0.as_ptr() as *const [u64; 4];
-                    let b_ptr = (bi.0).0.as_ptr() as *const [u64; 4];
-                    let mut tmp = [0u64; 4];
-                    sp1_lib::sys_bigint(&mut tmp, 0, &*a_ptr, &*b_ptr, &*m_ptr);
-
-                    // acc += tmp mod p
-                    let mut carry = 0u64;
-                    for i in 0..4 {
-                        let (s1, c1) = acc[i].overflowing_add(tmp[i]);
-                        let (s2, c2) = s1.overflowing_add(carry);
-                        acc[i] = s2;
-                        carry = (c1 as u64) + (c2 as u64);
-                    }
-
-                    // Réduction conditionnelle
-                    let need_reduce = carry > 0 || {
-                        let mut ge = false;
-                        let mut eq = true;
-                        for i in (0..4).rev() {
-                            if !eq {
-                                break;
-                            }
-                            if acc[i] > m[i] {
-                                ge = true;
-                                eq = false;
-                            } else if acc[i] < m[i] {
-                                eq = false;
-                            }
-                        }
-                        ge || eq
-                    };
-                    if need_reduce {
-                        let mut borrow = 0u64;
-                        for i in 0..4 {
-                            let (d1, b1) = acc[i].overflowing_sub(m[i]);
-                            let (d2, b2) = d1.overflowing_sub(borrow);
-                            acc[i] = d2;
-                            borrow = (b1 as u64) + (b2 as u64);
-                        }
-                    }
+            for (ai, bi) in a.iter().zip(b.iter()) {
+                if ai.is_zero() || bi.is_zero() {
+                    continue;
                 }
 
-                // acc est en R² → * R_inv → R¹
-                let mut result = [0u64; 4];
-                sp1_lib::sys_bigint(&mut result, 0, &acc, &r_inv, &*m_ptr);
-                let mut result_n = [0u64; N];
-                result_n.copy_from_slice(&result);
-                return Fp::new_unchecked(BigInt(result_n));
+                let lhs = bigint_as_u64x4(&ai.0);
+                let rhs = bigint_as_u64x4(&bi.0);
+                let tmp = sys_bigint_mul_mod_4(&lhs, &rhs, &modulus);
+                add_assign_mod_u64x4(&mut acc, &tmp, &modulus);
             }
+
+            let result = sys_bigint_mul_mod_4(&acc, &r_inv, &modulus);
+            return Fp::new_unchecked(bigint_from_u64x4(result));
         }
 
         T::sum_of_products(a, b)
@@ -786,39 +799,16 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     #[allow(unused_braces, clippy::absurd_extreme_comparisons)]
     fn square_in_place(a: &mut Fp<Self, N>) {
         #[cfg(target_os = "zkvm")]
-        if N == 4 {
-            let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
-                0x992d30ed00000001 => Some([
-                    0xcf3f8e8753a769a9,
-                    0xac9fba6a4077fc57,
-                    0x70cb2996efc89a65,
-                    0x21f1c4ff1e2278d5,
-                ]),
-                0x8c46eb2100000001 => Some([
-                    0x6119a3dd8e1a6f7f,
-                    0xc68de1279dc601eb,
-                    0x5790be58c050df13,
-                    0x1f7a89dd17647953,
-                ]),
-                _ => None,
-            };
-
-            if let Some(r_inv) = r_inv_opt {
-                #[allow(unsafe_code)]
-                unsafe {
-                    let a_ptr = (a.0).0.as_ptr() as *const [u64; 4];
-                    let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
-                    let mut tmp = [0u64; 4];
-                    let mut result = [0u64; 4];
-
-                    sp1_lib::sys_bigint(&mut tmp, 0, &*a_ptr, &*a_ptr, &*m_ptr);
-                    sp1_lib::sys_bigint(&mut result, 0, &tmp, &r_inv, &*m_ptr);
-
-                    let dst = (a.0).0.as_mut_ptr() as *mut [u64; 4];
-                    *dst = result;
-                }
+        if let Some(r_inv) = pasta_r_inv(&Self::MODULUS) {
+            if a.is_zero() || a.0 == T::R {
                 return;
             }
+
+            let lhs = bigint_as_u64x4(&a.0);
+            let modulus = bigint_as_u64x4(&Self::MODULUS);
+            let result = sys_bigint_mul_mont_4(&lhs, &lhs, &r_inv, &modulus);
+            a.0 = bigint_from_u64x4(result);
+            return;
         }
 
         T::square_in_place(a)
@@ -830,39 +820,25 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
 
     fn from_bigint(r: BigInt<N>) -> Option<Fp<Self, N>> {
         #[cfg(target_os = "zkvm")]
-        if let Some(r_inv) = pasta_r_inv(&Self::MODULUS) {
-            let _ = r_inv; // unused here, we use R directly
+        if pasta_r_inv(&Self::MODULUS).is_some() {
             if r.0.iter().all(|&x| x == 0) {
-                return Some(Fp::new_unchecked(BigInt([0u64; N])));
+                return Some(Fp::<Self, N>::zero());
             }
-            let m = &Self::MODULUS.0;
-            let mut above = false;
-            let mut done = false;
-            for i in (0..4).rev() {
-                if done {
-                    break;
-                }
-                if r.0[i] > m[i] {
-                    above = true;
-                    done = true;
-                } else if r.0[i] < m[i] {
-                    done = true;
-                }
+
+            let is_one = r.0[0] == 1 && r.0[1..].iter().all(|&x| x == 0);
+            if is_one {
+                return Some(Fp::<Self, N>::new_unchecked(T::R));
             }
-            if above || !done {
+
+            let modulus = bigint_as_u64x4(&Self::MODULUS);
+            let input = bigint_as_u64x4(&r);
+            if geq_u64x4(&input, &modulus) {
                 return None;
             }
-            #[allow(unsafe_code)]
-            unsafe {
-                let r_ptr = r.0.as_ptr() as *const [u64; 4];
-                let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
-                let r_mont: [u64; 4] = *(T::R.0.as_ptr() as *const [u64; 4]);
-                let mut result = [0u64; 4];
-                sp1_lib::sys_bigint(&mut result, 0, &*r_ptr, &r_mont, &*m_ptr);
-                let mut result_n = [0u64; N];
-                result_n.copy_from_slice(&result);
-                return Some(Fp::new_unchecked(BigInt(result_n)));
-            }
+
+            let r_mont = bigint_as_u64x4(&T::R);
+            let result = sys_bigint_mul_mod_4(&input, &r_mont, &modulus);
+            return Some(Fp::new_unchecked(bigint_from_u64x4(result)));
         }
 
         T::from_bigint(r)
@@ -872,35 +848,11 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     #[allow(clippy::modulo_one)]
     fn into_bigint(a: Fp<Self, N>) -> BigInt<N> {
         #[cfg(target_os = "zkvm")]
-        if N == 4 {
-            let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {
-                0x992d30ed00000001 => Some([
-                    0xcf3f8e8753a769a9,
-                    0xac9fba6a4077fc57,
-                    0x70cb2996efc89a65,
-                    0x21f1c4ff1e2278d5,
-                ]),
-                0x8c46eb2100000001 => Some([
-                    0x6119a3dd8e1a6f7f,
-                    0xc68de1279dc601eb,
-                    0x5790be58c050df13,
-                    0x1f7a89dd17647953,
-                ]),
-                _ => None,
-            };
-
-            if let Some(r_inv) = r_inv_opt {
-                #[allow(unsafe_code)]
-                unsafe {
-                    let a_ptr = (a.0).0.as_ptr() as *const [u64; 4];
-                    let m_ptr = Self::MODULUS.0.as_ptr() as *const [u64; 4];
-                    let mut result = [0u64; 4];
-                    sp1_lib::sys_bigint(&mut result, 0, &*a_ptr, &r_inv, &*m_ptr);
-                    let mut result_n = [0u64; N];
-                    result_n.copy_from_slice(&result);
-                    return BigInt(result_n);
-                }
-            }
+        if let Some(r_inv) = pasta_r_inv(&Self::MODULUS) {
+            let lhs = bigint_as_u64x4(&a.0);
+            let modulus = bigint_as_u64x4(&Self::MODULUS);
+            let result = sys_bigint_mul_mod_4(&lhs, &r_inv, &modulus);
+            return bigint_from_u64x4(result);
         }
         T::into_bigint(a)
     }
