@@ -673,7 +673,7 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     fn mul_assign(a: &mut Fp<Self, N>, b: &Fp<Self, N>) {
         #[cfg(feature = "debug-log")]
         {
-            std::println!("mul assign montgomery");
+            // std::println!("mul assign montgomery");
         }
         #[cfg(target_os = "zkvm")]
         if N == 4 {
