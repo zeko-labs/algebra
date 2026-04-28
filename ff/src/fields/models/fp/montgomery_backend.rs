@@ -172,10 +172,6 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     #[unroll_for_loops(12)]
     #[inline(always)]
     fn mul_assign(a: &mut Fp<MontBackend<Self, N>, N>, b: &Fp<MontBackend<Self, N>, N>) {
-        #[cfg(feature = "debug-log")]
-        {
-            std::println!("mul assign montgomery");
-        }
         // No-carry optimisation applied to CIOS
         if Self::CAN_USE_NO_CARRY_MUL_OPT {
             if N <= 6
