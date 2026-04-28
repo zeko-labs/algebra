@@ -18,6 +18,10 @@ pub trait Fp4Config: 'static + Send + Sync {
 
     #[inline(always)]
     fn mul_fp2_by_nonresidue_in_place(fe: &mut Fp2<Self::Fp2Config>) -> &mut Fp2<Self::Fp2Config> {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul_fp2_by_nonresidue_in_place",);
+        }
         // see [[DESD06, Section 5.1]](https://eprint.iacr.org/2006/471.pdf).
         let new_c1 = fe.c0;
         Self::Fp2Config::mul_fp_by_nonresidue_in_place(&mut fe.c1);
@@ -54,11 +58,19 @@ pub type Fp4<P> = QuadExtField<Fp4ConfigWrapper<P>>;
 
 impl<P: Fp4Config> Fp4<P> {
     pub fn mul_by_fp(&mut self, element: &<P::Fp2Config as Fp2Config>::Fp) {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul_by_fp",);
+        }
         self.c0.mul_assign_by_fp(element);
         self.c1.mul_assign_by_fp(element);
     }
 
     pub fn mul_by_fp2(&mut self, element: &Fp2<P::Fp2Config>) {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul_by_fp2",);
+        }
         self.c0 *= element;
         self.c1 *= element;
     }

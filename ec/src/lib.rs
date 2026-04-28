@@ -62,6 +62,10 @@ pub trait PrimeGroup: AdditiveGroup<Scalar = Self::ScalarField> {
     /// Computes `other * self`, where `other` is a *big-endian*
     /// bit representation of some integer.
     fn mul_bits_be(&self, other: impl Iterator<Item = bool>) -> Self {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul_bits_be",);
+        }
         let mut res = Self::zero();
         for b in other.skip_while(|b| !b) {
             // skip leading zeros

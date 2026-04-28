@@ -52,6 +52,10 @@ pub trait CubicExtConfig: 'static + Send + Sync + Sized {
     /// the quadratic non-residue. This is used in multiplication and squaring.
     #[inline(always)]
     fn mul_base_field_by_nonresidue_in_place(fe: &mut Self::BaseField) -> &mut Self::BaseField {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul_base_field_by_nonresidue_in_place",);
+        }
         *fe *= &Self::NONRESIDUE;
         fe
     }
@@ -60,6 +64,10 @@ pub trait CubicExtConfig: 'static + Send + Sync + Sized {
     /// the quadratic non-residue. This is used in multiplication and squaring.
     #[inline(always)]
     fn mul_base_field_by_nonresidue(mut fe: Self::BaseField) -> Self::BaseField {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul_base_field_by_nonresidue",);
+        }
         Self::mul_base_field_by_nonresidue_in_place(&mut fe);
         fe
     }
@@ -109,6 +117,10 @@ impl<P: CubicExtConfig> CubicExtField<P> {
     }
 
     pub fn mul_assign_by_base_field(&mut self, value: &P::BaseField) {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul_assign_by_base_field",);
+        }
         self.c0.mul_assign(value);
         self.c1.mul_assign(value);
         self.c2.mul_assign(value);

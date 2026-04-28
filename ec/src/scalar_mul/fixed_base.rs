@@ -92,6 +92,10 @@ where
     /// Multiply one fixed base by one scalar using GLV + wNAF.
     #[inline]
     pub fn mul_scalar(&self, index: usize, scalar: &C::ScalarField) -> Projective<C> {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul_scalar",);
+        }
         let entry = &self.entries[index];
         let ctx = WnafContext::new(self.window_size);
 

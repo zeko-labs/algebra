@@ -88,6 +88,10 @@ pub trait GLVConfig: Send + Sync + 'static + SWCurveConfig {
     fn endomorphism_affine(p: &Affine<Self>) -> Affine<Self>;
 
     fn glv_mul_projective(p: Projective<Self>, k: Self::ScalarField) -> Projective<Self> {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("glv_mul_projective");
+        }
         let ((sgn_k1, k1), (sgn_k2, k2)) = Self::scalar_decomposition(k);
 
         let mut b1 = p;

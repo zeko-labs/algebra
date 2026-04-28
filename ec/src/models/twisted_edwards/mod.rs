@@ -60,6 +60,10 @@ pub trait TECurveConfig: super::CurveConfig {
     /// Default implementation of group multiplication for projective
     /// coordinates
     fn mul_projective(base: &Projective<Self>, scalar: &[u64]) -> Projective<Self> {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul_projective",);
+        }
         let mut res = Projective::<Self>::zero();
         for b in ark_ff::BitIteratorBE::without_leading_zeros(scalar) {
             res.double_in_place();
@@ -74,6 +78,10 @@ pub trait TECurveConfig: super::CurveConfig {
     /// Default implementation of group multiplication for affine
     /// coordinates
     fn mul_affine(base: &Affine<Self>, scalar: &[u64]) -> Projective<Self> {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul_affine",);
+        }
         let mut res = Projective::<Self>::zero();
         for b in ark_ff::BitIteratorBE::without_leading_zeros(scalar) {
             res.double_in_place();

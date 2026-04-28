@@ -173,6 +173,10 @@ macro_rules! impl_multiplicative_ops_from_ref {
 
             #[inline]
             fn mul(self, other: Self) -> Self {
+                #[cfg(feature = "debug-log")]
+                {
+                    std::println!("mul arithmetic",);
+                }
                 let mut result = self;
                 result.mul_assign(&other);
                 result
@@ -197,6 +201,10 @@ macro_rules! impl_multiplicative_ops_from_ref {
 
             #[inline]
             fn mul(self, other: &'a mut Self) -> Self {
+                #[cfg(feature = "debug-log")]
+                {
+                    std::println!("mul arithmetic 2",);
+                }
                 let mut result = self;
                 result.mul_assign(&*other);
                 result
@@ -220,6 +228,10 @@ macro_rules! impl_multiplicative_ops_from_ref {
 
             #[inline]
             fn mul(self, mut other: $type<P>) -> $type<P> {
+                #[cfg(feature = "debug-log")]
+                {
+                    std::println!("mul arithmetic 3",);
+                }
                 other.mul_assign(self);
                 other
             }
@@ -231,6 +243,10 @@ macro_rules! impl_multiplicative_ops_from_ref {
 
             #[inline]
             fn mul(self, other: &'a $type<P>) -> $type<P> {
+                #[cfg(feature = "debug-log")]
+                {
+                    std::println!("mul arithmetic 4",);
+                }
                 let mut result = *self;
                 result.mul_assign(&*other);
                 result
@@ -243,6 +259,10 @@ macro_rules! impl_multiplicative_ops_from_ref {
 
             #[inline]
             fn mul(self, other: &'a mut $type<P>) -> $type<P> {
+                #[cfg(feature = "debug-log")]
+                {
+                    std::println!("mul arithmetic 5",);
+                }
                 let mut result = *self;
                 result.mul_assign(&*other);
                 result

@@ -173,6 +173,10 @@ pub struct BatchMulPreprocessing<T: ScalarMul> {
 
 impl<T: ScalarMul> BatchMulPreprocessing<T> {
     pub fn new(base: T, num_scalars: usize) -> Self {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("batch_mul_preprocessing");
+        }
         let scalar_size = T::ScalarField::MODULUS_BIT_SIZE as usize;
         Self::with_num_scalars_and_scalar_size(base, num_scalars, scalar_size)
     }

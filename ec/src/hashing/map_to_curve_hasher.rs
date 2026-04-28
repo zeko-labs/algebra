@@ -47,6 +47,10 @@ where
     /// oracle encoding (hash_to_curve) defined by combining these components.
     /// See <https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-09#section-3>
     fn hash(&self, msg: &[u8]) -> Result<T::Affine, HashToCurveError> {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("map_to_curve_hash",);
+        }
         // IETF spec of hash_to_curve, from hash_to_field and map_to_curve
         // sub-components
         // 1. u = hash_to_field(msg, 2)

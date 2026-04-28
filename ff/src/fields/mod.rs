@@ -92,7 +92,7 @@ pub trait AdditiveGroup:
     fn double(&self) -> Self {
         #[cfg(feature = "debug-log")]
         {
-            std::println!("double in place in mod field");
+            std::println!("double in mod field");
         }
         let mut copy = *self;
         copy.double_in_place();
@@ -100,6 +100,10 @@ pub trait AdditiveGroup:
     }
     /// Doubles `self` in place.
     fn double_in_place(&mut self) -> &mut Self {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("double in place mod field",);
+        }
         self.add_assign(*self);
         self
     }
@@ -265,6 +269,10 @@ pub trait Field:
     /// Returns the square root of self, if it exists.
     #[must_use]
     fn sqrt(&self) -> Option<Self> {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("sqrt ff mod",);
+        }
         match Self::SQRT_PRECOMP {
             Some(tv) => tv.sqrt(self),
             None => unimplemented!(),
@@ -273,6 +281,10 @@ pub trait Field:
 
     /// Sets `self` to be the square root of `self`, if it exists.
     fn sqrt_in_place(&mut self) -> Option<&mut Self> {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("sqrt_in_place ff mod",);
+        }
         (*self).sqrt().map(|sqrt| {
             *self = sqrt;
             self

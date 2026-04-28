@@ -225,6 +225,10 @@ ark_ff::impl_additive_ops_from_ref!(PairingOutput, Pairing);
 
 impl<P: Pairing, T: Borrow<P::ScalarField>> MulAssign<T> for PairingOutput<P> {
     fn mul_assign(&mut self, other: T) {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!("pairing mul assign",);
+        }
         *self = self.mul_bigint(other.borrow().into_bigint());
     }
 }
