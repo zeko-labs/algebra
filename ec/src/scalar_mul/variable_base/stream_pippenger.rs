@@ -75,6 +75,13 @@ pub struct HashMapPippenger<G: VariableBaseMSM> {
 impl<G: VariableBaseMSM> HashMapPippenger<G> {
     /// Produce a new hash map with the maximum msm buffer size.
     pub fn new(max_msm_buffer: usize) -> Self {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!(
+                "using pippenger with hash map and buffer size {}",
+                max_msm_buffer
+            );
+        }
         Self {
             buffer: HashMap::with_capacity_and_hasher(
                 max_msm_buffer,

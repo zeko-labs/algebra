@@ -172,6 +172,10 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     #[unroll_for_loops(12)]
     #[inline(always)]
     fn mul_assign(a: &mut Fp<MontBackend<Self, N>, N>, b: &Fp<MontBackend<Self, N>, N>) {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul assign montgomery");
+        }
         // No-carry optimisation applied to CIOS
         if Self::CAN_USE_NO_CARRY_MUL_OPT {
             if N <= 6
@@ -671,6 +675,10 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     /// zero bit in the rest of the modulus.
     #[inline]
     fn mul_assign(a: &mut Fp<Self, N>, b: &Fp<Self, N>) {
+        #[cfg(feature = "debug-log")]
+        {
+            std::println!("mul assign montgomery", max_msm_buffer);
+        }
         #[cfg(target_os = "zkvm")]
         if N == 4 {
             let r_inv_opt: Option<[u64; 4]> = match Self::MODULUS.0[0] {

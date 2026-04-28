@@ -90,6 +90,13 @@ pub trait AdditiveGroup:
     /// Doubles `self`.
     #[must_use]
     fn double(&self) -> Self {
+         #[cfg(feature = "debug-log")]
+        {
+            std::println!(
+                "double in plqce mod",
+                max_msm_buffer
+            );
+        }
         let mut copy = *self;
         copy.double_in_place();
         copy
