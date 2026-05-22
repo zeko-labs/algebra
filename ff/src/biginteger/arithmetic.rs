@@ -82,6 +82,9 @@ pub fn sbb_for_sub_with_borrow(a: &mut u64, b: u64, borrow: u8) -> u8 {
     }
 }
 
+/// Compute `a * b` → full 128-bit product.
+/// Kept as `const fn` for use in constant-evaluation contexts.
+/// Hot paths use `widening_mul_fast` below which dispatches to SIMD on wasm.
 #[inline(always)]
 #[doc(hidden)]
 pub const fn widening_mul(a: u64, b: u64) -> u128 {
@@ -104,12 +107,69 @@ pub const fn widening_mul(a: u64, b: u64) -> u128 {
     }
 }
 
+/// WASM SIMD128 accelerated widening multiply: `a * b` → 128-bit product.
+///
+/// Uses two `i64x2.extmul_{low,high}_u32x4` instructions to compute all four
+/// 32×32→64 cross-products simultaneously, replacing four scalar `i64.mul`s.
+///
+/// Vector packing layout:
+/// ```text
+/// va = [a_lo, a_lo, a_hi, a_hi]  (u32 lanes)
+/// vb = [b_lo, b_hi, b_lo, b_hi]  (u32 lanes)
+///
+/// extmul_low(va, vb)  → [a_lo*b_lo, a_lo*b_hi]  (u64 lanes 0, 1)
+/// extmul_high(va, vb) → [a_hi*b_lo, a_hi*b_hi]  (u64 lanes 2, 3)
+/// ```
+#[cfg(all(target_family = "wasm", target_feature = "simd128"))]
+#[inline(always)]
+fn widening_mul_simd(a: u64, b: u64) -> u128 {
+    use core::arch::wasm32::{
+        i64x2_extmul_high_u32x4, i64x2_extmul_low_u32x4, u32x4, u64x2_extract_lane,
+    };
+
+    let a_lo = a as u32;
+    let a_hi = (a >> 32) as u32;
+    let b_lo = b as u32;
+    let b_hi = (b >> 32) as u32;
+
+    let va = u32x4(a_lo, a_lo, a_hi, a_hi);
+    let vb = u32x4(b_lo, b_hi, b_lo, b_hi);
+
+    let lo = i64x2_extmul_low_u32x4(va, vb);  // [a_lo*b_lo, a_lo*b_hi]
+    let hi = i64x2_extmul_high_u32x4(va, vb); // [a_hi*b_lo, a_hi*b_hi]
+
+    let lolo = u64x2_extract_lane::<0>(lo);
+    let lohi = u64x2_extract_lane::<1>(lo);
+    let hilo = u64x2_extract_lane::<0>(hi);
+    let hihi = u64x2_extract_lane::<1>(hi);
+
+    // a * b = lolo + (lohi + hilo) * 2^32 + hihi * 2^64
+    (lolo as u128)
+        + (((lohi as u128) + (hilo as u128)) << 32)
+        + ((hihi as u128) << 64)
+}
+
+/// Hot-path widening multiply: dispatches to SIMD on wasm+simd128, otherwise
+/// falls back to the scalar `widening_mul`.
+#[inline(always)]
+#[doc(hidden)]
+pub fn widening_mul_fast(a: u64, b: u64) -> u128 {
+    #[cfg(all(target_family = "wasm", target_feature = "simd128"))]
+    {
+        widening_mul_simd(a, b)
+    }
+    #[cfg(not(all(target_family = "wasm", target_feature = "simd128")))]
+    {
+        widening_mul(a, b)
+    }
+}
+
 /// Calculate a + b * c, returning the lower 64 bits of the result and setting
 /// `carry` to the upper 64 bits.
 #[inline(always)]
 #[doc(hidden)]
 pub fn mac(a: u64, b: u64, c: u64, carry: &mut u64) -> u64 {
-    let tmp = (a as u128) + widening_mul(b, c);
+    let tmp = (a as u128) + widening_mul_fast(b, c);
     *carry = (tmp >> 64) as u64;
     tmp as u64
 }
@@ -119,10 +179,14 @@ pub fn mac(a: u64, b: u64, c: u64, carry: &mut u64) -> u64 {
 #[inline(always)]
 #[doc(hidden)]
 pub fn mac_discard(a: u64, b: u64, c: u64, carry: &mut u64) {
-    let tmp = (a as u128) + widening_mul(b, c);
+    let tmp = (a as u128) + widening_mul_fast(b, c);
     *carry = (tmp >> 64) as u64;
 }
 
+// NOTE: These macros keep the const-compatible `widening_mul` so they can be
+// used inside `const fn` contexts in montgomery_backend.rs.
+// The non-const function variants (`mac`, `mac_discard`, `mac_with_carry`)
+// use `widening_mul_fast` which dispatches to SIMD on wasm+simd128.
 macro_rules! mac_with_carry {
     ($a:expr, $b:expr, $c:expr, &mut $carry:expr$(,)?) => {{
         let tmp =
@@ -145,7 +209,7 @@ macro_rules! mac {
 #[inline(always)]
 #[doc(hidden)]
 pub fn mac_with_carry(a: u64, b: u64, c: u64, carry: &mut u64) -> u64 {
-    let tmp = (a as u128) + widening_mul(b, c) + (*carry as u128);
+    let tmp = (a as u128) + widening_mul_fast(b, c) + (*carry as u128);
     *carry = (tmp >> 64) as u64;
     tmp as u64
 }
